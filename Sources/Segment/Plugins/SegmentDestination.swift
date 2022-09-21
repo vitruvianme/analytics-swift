@@ -125,18 +125,18 @@ public class SegmentDestination: DestinationPlugin {
                         case .success(_):
                             storage.remove(file: url)
                             self.cleanupUploads()
-                    case .failure(let error):
-                        // Workaround CPU spike if Segment is blocked by DNS
-                        // or a local firewall. This does mean that events logged on a
-                        // blocked network are lost.
-                        //
-                        // The flush behaviour is going to be changed upstream, such
-                        // that this is no longer an issue but with no ETA:
-                        // See https://github.com/segmentio/analytics-swift/issues/152
-                        if ((error as? URLError)?.code == URLError.badURL) ||
-                           ((error as? URLError)?.code == URLError.cannotConnectToHost) {
-                            self.cleanupUploads()
-                        }
+                        case .failure(let error):
+                            // Workaround CPU spike if Segment is blocked by DNS
+                            // or a local firewall. This does mean that events logged on a
+                            // blocked network are lost.
+                            //
+                            // The flush behaviour is going to be changed upstream, such
+                            // that this is no longer an issue but with no ETA:
+                            // See https://github.com/segmentio/analytics-swift/issues/152
+                            if ((error as? URLError)?.code == URLError.badURL) ||
+                               ((error as? URLError)?.code == URLError.cannotConnectToHost) {
+                                storage.remove(file: url)
+                            }
 
                         analytics.logFlush()
                     }
