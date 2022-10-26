@@ -20,11 +20,12 @@ public class HTTPClient {
     private static let defaultAPIHost = "api.segment.io/v1"
     private static let defaultCDNHost = "cdn-settings.segment.com/v1"
     
-    private var session: URLSession
+    internal var session: URLSession
     private var apiHost: String
     private var apiKey: String
     private var cdnHost: String
-    private let analytics: Analytics
+    
+    private weak var analytics: Analytics?
     
     init(analytics: Analytics, apiKey: String? = nil, apiHost: String? = nil, cdnHost: String? = nil) {
         self.analytics = analytics
@@ -75,7 +76,7 @@ public class HTTPClient {
         
         let dataTask = session.uploadTask(with: urlRequest, fromFile: batch) { [weak self] (data, response, error) in
             if let error = error {
-                self?.analytics.log(message: "Error uploading request \(error.localizedDescription).")
+                self?.analytics?.log(message: "Error uploading request \(error.localizedDescription).")
                 completion(.failure(error))
             } else if let httpResponse = response as? HTTPURLResponse {
                 switch (httpResponse.statusCode) {
@@ -83,16 +84,13 @@ public class HTTPClient {
                     completion(.success(true))
                     return
                 case 300..<400:
-                    self?.analytics.log(message: "Server responded with unexpected HTTP code \(httpResponse.statusCode).")
+                    self?.analytics?.reportInternalError(AnalyticsError.networkUnexpectedHTTPCode(httpResponse.statusCode))
                     completion(.failure(HTTPClientErrors.statusCode(code: httpResponse.statusCode)))
                 case 429:
-                    self?.analytics.log(message: "Server limited client with response code \(httpResponse.statusCode).")
+                    self?.analytics?.reportInternalError(AnalyticsError.networkServerLimited(httpResponse.statusCode))
                     completion(.failure(HTTPClientErrors.statusCode(code: httpResponse.statusCode)))
-                case 400..<500:
-                    self?.analytics.log(message: "Server rejected payload with HTTP code \(httpResponse.statusCode).")
-                    completion(.failure(HTTPClientErrors.statusCode(code: httpResponse.statusCode)))
-                default: // All 500 codes
-                    self?.analytics.log(message: "Server rejected payload with HTTP code \(httpResponse.statusCode).")
+                default:
+                    self?.analytics?.reportInternalError(AnalyticsError.networkServerRejected(httpResponse.statusCode))
                     completion(.failure(HTTPClientErrors.statusCode(code: httpResponse.statusCode)))
                 }
             }
@@ -113,26 +111,34 @@ public class HTTPClient {
 
         let dataTask = session.dataTask(with: urlRequest) { [weak self] (data, response, error) in
             if let error = error {
-                self?.analytics.log(message: "Error fetching settings \(error.localizedDescription).")
+                self?.analytics?.reportInternalError(AnalyticsError.networkUnknown(error))
                 completion(false, nil)
                 return
             }
 
             if let httpResponse = response as? HTTPURLResponse {
                 if httpResponse.statusCode > 300 {
-                    self?.analytics.log(message: "Server responded with unexpected HTTP code \(httpResponse.statusCode).")
+                    self?.analytics?.reportInternalError(AnalyticsError.networkUnexpectedHTTPCode(httpResponse.statusCode))
                     completion(false, nil)
                     return
                 }
             }
 
-            guard let data = data, let responseJSON = try? JSONDecoder().decode(Settings.self, from: data) else {
-                self?.analytics.log(message: "Error deserializing settings.")
+            guard let data = data else {
+                self?.analytics?.reportInternalError(AnalyticsError.networkInvalidData)
                 completion(false, nil)
                 return
             }
             
-            completion(true, responseJSON)
+            do {
+                let responseJSON = try JSONDecoder().decode(Settings.self, from: data)
+                completion(true, responseJSON)
+            } catch {
+                self?.analytics?.reportInternalError(AnalyticsError.jsonUnableToDeserialize(error))
+                completion(false, nil)
+                return
+            }
+            
         }
         
         dataTask.resume()

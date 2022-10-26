@@ -9,7 +9,7 @@ import Foundation
 
 public class Context: PlatformPlugin {
     public let type: PluginType = .before
-    public var analytics: Analytics?
+    public weak var analytics: Analytics?
     
     internal var staticContext = staticContextData()
     internal static var device = VendorSystem.current
@@ -30,7 +30,7 @@ public class Context: PlatformPlugin {
         do {
             workingEvent.context = try JSON(context)
         } catch {
-            exceptionFailure("Unable to convert context to JSON: \(error)")
+            analytics?.reportInternalError(error)
         }
         
         return workingEvent

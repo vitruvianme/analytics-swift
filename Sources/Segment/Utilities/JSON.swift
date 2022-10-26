@@ -18,7 +18,7 @@ public enum JSON: Equatable {
     case array([JSON])
     case object([String: JSON])
     
-    private enum JSONError: Error {
+    internal enum JSONError: Error {
         case unknown
         case nonJSONType(type: String)
         case incorrectType
@@ -51,7 +51,7 @@ public enum JSON: Equatable {
             }
             
         // handle swift types
-        case nil:
+        case Optional<Any>.none:
             self = .null
         case let url as URL:
             self = .string(url.absoluteString)

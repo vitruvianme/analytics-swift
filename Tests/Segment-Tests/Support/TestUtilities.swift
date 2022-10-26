@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import XCTest
 @testable import Segment
 
 extension UUID{
@@ -133,3 +134,41 @@ func waitUntilStarted(analytics: Analytics?) {
         }
     }
 }
+
+extension XCTestCase {
+    func checkIfLeaked(_ instance: AnyObject, file: StaticString = #filePath, line: UInt = #line) {
+        addTeardownBlock { [weak instance] in
+            if instance != nil {
+                print("Instance \(String(describing: instance)) is not nil")
+            }
+            XCTAssertNil(instance, "Instance should have been deallocated. Potential memory leak!", file: file, line: line)
+        }
+    }
+}
+
+#if !os(Linux)
+
+class BlockNetworkCalls: URLProtocol {
+    var initialURL: URL? = nil
+    override class func canInit(with request: URLRequest) -> Bool {
+        
+        return true
+    }
+    
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        return request
+    }
+    
+    override var cachedResponse: CachedURLResponse? { return nil }
+    
+    override func startLoading() {
+        client?.urlProtocol(self, didReceive: HTTPURLResponse(url: URL(string: "http://api.segment.com")!, statusCode: 200, httpVersion: nil, headerFields: ["blocked": "true"])!, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    
+    override func stopLoading() {
+        
+    }
+}
+
+#endif
